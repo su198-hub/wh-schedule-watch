@@ -1,0 +1,30 @@
+name: watch
+on:
+  schedule:
+    - cron: "*/5 21,22,23,0,1,2,3,4 * * *"    # every 5 min, 16:00-23:59 ET (EST) / 17:00-00:59 ET (EDT)
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: watch
+  cancel-in-progress: false
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: watch
+        env:
+          DISPATCH_TOKEN: ${{ secrets.DISPATCH_TOKEN }}
+          TARGET_REPO: ${{ secrets.TARGET_REPO }}
+          TARGET_WORKFLOW: ${{ secrets.TARGET_WORKFLOW }}
+          TARGET_JOB: ${{ secrets.TARGET_JOB }}
+        run: python3 watch.py
+      - name: save the log
+        run: |
+          git config user.name "wh-schedule-watch"; git config user.email "actions@users.noreply.github.com"
+          git add log.csv seen.json
+          git diff --cached --quiet && { echo "no change"; exit 0; }
+          git commit -q -m "log $(date -u +%FT%H:%MZ)"
+          for i in 1 2 3; do git pull -q --rebase && git push -q && exit 0; sleep 5; done
