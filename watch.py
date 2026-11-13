@@ -12,6 +12,7 @@ Standard library only. Reads public data; writes log.csv and seen.json in this r
 
     python watch.py           # one pass
     python watch.py --init    # mark the current posts as seen (no dispatch)
+    python watch.py --test-dispatch   # send one dispatch with job "noop" (tests the token and target), nothing else
 """
 import csv, datetime as dt, json, os, re, sys, urllib.parse, urllib.request
 from zoneinfo import ZoneInfo
@@ -62,10 +63,10 @@ def schedule_posts():
     return out
 
 
-def dispatch():
+def dispatch(job=None):
     tok, repo = os.environ.get("DISPATCH_TOKEN"), os.environ.get("TARGET_REPO")
     if not tok or not repo: return "no target configured"
-    wf, job = os.environ.get("TARGET_WORKFLOW", "live.yml"), os.environ.get("TARGET_JOB", "sched")
+    wf, job = os.environ.get("TARGET_WORKFLOW", "live.yml"), job or os.environ.get("TARGET_JOB", "sched")
     req = urllib.request.Request(f"https://api.github.com/repos/{repo}/actions/workflows/{wf}/dispatches", method="POST",
                                  data=json.dumps({"ref": "main", "inputs": {"job": job}}).encode(),
                                  headers={"Authorization": f"Bearer {tok}", "Accept": "application/vnd.github+json",
@@ -110,4 +111,7 @@ def main(init=False):
 
 
 if __name__ == "__main__":
-    main(init="--init" in sys.argv)
+    if "--test-dispatch" in sys.argv:
+        print("test dispatch (job noop):", dispatch("noop"))
+    else:
+        main(init="--init" in sys.argv)
