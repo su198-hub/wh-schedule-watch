@@ -4,12 +4,11 @@ Every run (started every few minutes, US Eastern time):
   1. reads the newest posts of whpresspool.bsky.social (public API, no login), which relays the White House press
      pool emails: the schedule for the next day (or the weekend), and same-day updates;
   2. logs each new schedule or update post: when it was posted, when this watcher first saw it, the days it covers;
-  3. for a new post, sends a workflow_dispatch to the workflow named by the secrets (TARGET_REPO, TARGET_WORKFLOW,
-     TARGET_JOB, DISPATCH_TOKEN), with job "sched" or "sched_day" (decide() has the windows):
-       evening  Mon-Fri and Sun 17:00-23:59 ET: a new post that covers a later day                      -> "sched"
-       morning  Mon-Fri 06:00-08:59 ET: a new post that covers today (a same-day release)               -> "sched_day"
-       daytime  Mon-Fri 09:00-16:59 ET: a new schedule post that covers today, or an "added ... to the
-                daily guidance" / "updated guidance" post made today                                    -> "sched_day"
+  3. for a new post seen on a weekday evening (Mon-Fri 17:00-23:59 ET) that covers a later day, sends a workflow_dispatch
+     to the workflow named by the secrets (TARGET_REPO, TARGET_WORKFLOW, TARGET_JOB, DISPATCH_TOKEN). Every other post is
+     only LOGGED (morning and daytime same-day posts, "added ... to the daily guidance" updates, Sunday evening): their time
+     is recorded in log.csv, nothing is dispatched. A failed dispatch is retried on the next pass (the post is not marked
+     seen until it has been dispatched or five attempts have failed);
   4. records when Roll Call Factbase's public calendar JSON first lists each logged day (how far behind it is).
 
 Standard library only. Reads public data; writes log.csv and seen.json in this repo.
@@ -33,7 +32,7 @@ SCHEDULE_TITLE = re.compile(r"Trump.s (Daily|Weekend) Schedule")
 # a free-text update: "the White House has just added an executive order signing at 5PM to the daily guidance"
 UPDATE_POST = re.compile(r"\badded\b.{0,160}?\bto the (?:daily |weekend )?(?:guidance|schedule)\b|"
                          r"\b(?:updated|revised) (?:daily |weekend )?(?:guidance|schedule)\b", re.I | re.S)
-RANGE_TITLE = re.compile(r"(?:Daily|Weekend) Schedule[^\n]*\n[^\n]*?\w{3,9}\.? \d{1,2}\s*[-–—]\s*(?:\w{3,9}\.? )?\d{1,2},? \d{4}")
+RANGE_TITLE = re.compile(r"(?:Daily|Weekend) Schedule[^\n]*\n[^\n]*[-\u2013\u2014][^\n]*\d{4}")      # a title line with a dash and a year
 
 
 def get(url, params=None, timeout=30):
@@ -53,10 +52,12 @@ def days_covered(text, year):
     A title with a date range ('Oct. 13-15') and no per-day headers gives no days (never the first date alone):
     the caller logs it as a warning."""
     out = set()
-    for mon, d in re.findall(r"^\W*(?:MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY),\s+([A-Z]+)\.?\s+(\d{1,2})\b", text.upper(), re.M):
+    lines = [x for x in text.split("\n") if not re.search("[-\u2013\u2014]", x)]       # a line with a dash is a range or a heading, never a day:
+    body = "\n".join(lines)                                                      # "Friday, Nov. 13 - Sunday, Nov. 15, 2026" is the real weekend title
+    for mon, d in re.findall(r"^\W*(?:MONDAY|TUESDAY|WEDNESDAY|THURSDAY|FRIDAY|SATURDAY|SUNDAY),\s+([A-Z]+)\.?\s+(\d{1,2})\b", body.upper(), re.M):
         if mon_num(mon): out.add(dt.date(year, mon_num(mon), int(d)))
     if not out:
-        m = re.search(r"(?:day), (\w{3})\w*\.? (\d{1,2}), (\d{4})", text)
+        m = re.search(r"(?:day), (\w{3})\w*\.? (\d{1,2}), (\d{4})", body)
         if m and mon_num(m.group(1)): out.add(dt.date(int(m.group(3)), mon_num(m.group(1)), int(m.group(2))))
     return sorted(out)
 
@@ -74,14 +75,18 @@ def kind_of(text):
 
 
 def decide(now_et, kind, days):
-    """(job, why) for a new post seen at now_et covering `days` (dates). job is None when no window applies."""
+    """(job, why) for a new post seen at now_et covering `days` (dates). job is "sched" only for a weekday-evening post that covers
+    a later day; None otherwise (the post is only logged, with the reason). Morning and daytime posts for today, same-day
+    updates and Sunday evening are logged only: the bot's scheduled pres and refill runs read same-day updates themselves."""
     wd, h, today = now_et.weekday(), now_et.hour, now_et.date()
     later, today_in = any(d > today for d in days), today in days
-    if kind == "schedule" and (wd <= 4 or wd == 6) and 17 <= h <= 23 and later:
+    if kind == "schedule" and wd <= 4 and 17 <= h <= 23 and later:
         return "sched", "evening: covers a later day"
+    if kind == "schedule" and wd == 6 and 17 <= h <= 23 and later:
+        return None, "log only: Sunday evening (the bot does not trade Sunday; Monday's 09:07 run reads the schedule itself)"
     if wd <= 4 and 6 <= h < 17 and today_in:
-        if h < 9: return "sched_day", "morning: same-day release"
-        return "sched_day", "daytime: " + ("updated guidance for today" if kind == "update" else "new schedule post covering today")
+        return None, "log only: " + ("morning same-day release" if h < 9 else
+                                      "updated guidance for today" if kind == "update" else "new schedule post covering today")
     return None, "outside every window or covers no relevant day"
 
 
@@ -135,6 +140,11 @@ def main(init=False):
         if init: res = "init"
         elif job: res = dispatch(job)
         else: res = f"not dispatched ({why})"
+        if res.startswith("dispatch failed"):        # not seen yet: the next pass retries; five failures in all end it
+            fails = seen.setdefault("fails", {}); fails[uri] = fails.get(uri, 0) + 1
+            print(f"new {kind} post {posted}: {res} (attempt {fails[uri]})")
+            if fails[uri] < 5: continue
+            res += "; gave up after 5 attempts"
         if kind == "schedule" and range_without_days(text, days):
             res += "; WARNING date-range title with no per-day headers: no days read"
             print("WARNING: schedule post with a date-range title and no per-day headers; no days read")
@@ -142,6 +152,7 @@ def main(init=False):
                          lag_min=round((now - t_post).total_seconds() / 60, 1), days=" ".join(map(str, days)), dispatched=res,
                          factbase_listed_utc="", kind=kind))
         seen["uris"].append(uri)
+        seen.get("fails", {}).pop(uri, None)
         print(f"new {kind} post {posted} covering {[str(d) for d in days]}: {res}")
     pending = [r for r in rows if not r["factbase_listed_utc"] and r["days"] and r.get("kind") != "update"]
     if pending:

@@ -6,14 +6,14 @@ workflow in another repository when a new schedule or same-day update is posted 
 
 When it starts the other workflow (US Eastern time, `decide()` in `watch.py`):
 
-| Window | New post | Job input sent |
+| Window | New post | What happens |
 |---|---|---|
-| Mon-Fri and Sun 17:00-23:59 | a schedule post covering a later day | `sched` |
-| Mon-Fri 06:00-08:59 | a post covering today (a same-day release) | `sched_day` |
-| Mon-Fri 09:00-16:59 | a schedule post covering today, or an "added ... to the daily guidance" / "updated guidance" post made today | `sched_day` |
+| Mon-Fri 17:00-23:59 | a schedule post covering a later day | dispatch (`sched`) |
+| Sunday evening; Mon-Fri 06:00-16:59 | a schedule post, or an "added ... to the daily guidance" / "updated guidance" post | logged only (time and days in `log.csv`), nothing dispatched |
 
-Anything else is only logged. A schedule post whose title is a date range ("Oct. 13-15") with no per-day headers gives
-no days (never just the first date) and is logged with a warning.
+A failed dispatch is retried on the next pass (the post is not marked seen until it has been dispatched, or five attempts have failed).
+A schedule post whose title is a date range ("Friday, Nov. 13 - Sunday, Nov. 15, 2026", "Oct. 13-15") with no per-day headers gives
+no days (never either end of the range) and is logged with a warning. A line with a dash is never read as a day header.
 
 - `watch.py`: one pass, standard library only, public data only. `test_watch.py`: offline tests (`python -m unittest test_watch`).
 - `log.csv`: one row per schedule or update post: kind, posted time, first seen by the watcher, days covered, dispatch
