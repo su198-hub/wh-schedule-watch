@@ -32,6 +32,12 @@ SCHEDULE_TITLE = re.compile(r"Trump.s (Daily|Weekend) Schedule")
 # a free-text update: "the White House has just added an executive order signing at 5PM to the daily guidance"
 UPDATE_POST = re.compile(r"\badded\b.{0,160}?\bto the (?:daily |weekend )?(?:guidance|schedule)\b|"
                          r"\b(?:updated|revised) (?:daily |weekend )?(?:guidance|schedule)\b", re.I | re.S)
+# a post about a cancelled or moved signing ("has cancelled the 5PM executive order signing", "moved to 6PM"): logged as an update
+_CHG = r"cancel+ed|postponed|scrapped|removed|moved|rescheduled|pushed|delayed|no longer"
+_WHAT = r"executive order|proclamation|memorand\w*"
+CHANGE_POST = re.compile(rf"(?:{_CHG})[^.
+]{{0,160}}?(?:{_WHAT})|(?:{_WHAT})[^.
+]{{0,160}}?(?:{_CHG})", re.I)
 RANGE_TITLE = re.compile(r"(?:Daily|Weekend) Schedule[^\n]*\n[^\n]*[-\u2013\u2014][^\n]*\d{4}")      # a title line with a dash and a year
 
 
@@ -70,7 +76,7 @@ def range_without_days(text, days):
 def kind_of(text):
     """'schedule' (a Daily/Weekend Schedule post), 'update' (an added/updated guidance post), else None"""
     if SCHEDULE_TITLE.search(text[:80]): return "schedule"
-    if UPDATE_POST.search(text[:600]): return "update"
+    if UPDATE_POST.search(text[:600]) or CHANGE_POST.search(text[:600]): return "update"
     return None
 
 

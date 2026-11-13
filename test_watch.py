@@ -40,6 +40,9 @@ class Parse(unittest.TestCase):
         self.assertEqual(W.kind_of("The White House has just added an executive order signing at 5PM to the daily guidance"), "update")
         self.assertEqual(W.kind_of("UPDATED daily guidance: the signing moved to 6 PM"), "update")
         self.assertIsNone(W.kind_of("In-town pool report 4: the White House has called a lid"))
+        for t in ("UPDATE: The White House has cancelled the 5PM executive order signing.", "The executive order signing has been moved to 6PM.",
+                  "The executive order signing at 5:00 PM has been removed from today's schedule."):
+            self.assertEqual(W.kind_of(t), "update", t)
 
     def test_days(self):
         self.assertEqual(W.days_covered("📅 FRIDAY, NOVEMBER 13\n...\n📅 SATURDAY, NOVEMBER 14", 2026), [dt.date(2026, 11, 13), dt.date(2026, 11, 14)])
