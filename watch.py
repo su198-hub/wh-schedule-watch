@@ -35,9 +35,7 @@ UPDATE_POST = re.compile(r"\badded\b.{0,160}?\bto the (?:daily |weekend )?(?:gui
 # a post about a cancelled or moved signing ("has cancelled the 5PM executive order signing", "moved to 6PM"): logged as an update
 _CHG = r"cancel+ed|postponed|scrapped|removed|moved|rescheduled|pushed|delayed|no longer"
 _WHAT = r"executive order|proclamation|memorand\w*"
-CHANGE_POST = re.compile(rf"(?:{_CHG})[^.
-]{{0,160}}?(?:{_WHAT})|(?:{_WHAT})[^.
-]{{0,160}}?(?:{_CHG})", re.I)
+CHANGE_POST = re.compile(rf"\b(?:{_CHG})\b[^.\n]{{0,160}}?\b(?:{_WHAT})\b|\b(?:{_WHAT})\b[^.\n]{{0,160}}?\b(?:{_CHG})\b", re.I)
 RANGE_TITLE = re.compile(r"(?:Daily|Weekend) Schedule[^\n]*\n[^\n]*[-\u2013\u2014][^\n]*\d{4}")      # a title line with a dash and a year
 
 
