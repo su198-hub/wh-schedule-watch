@@ -1,2 +1,2 @@
-uri,posted_utc,seen_utc,lag_min,days,dispatched,factbase_listed_utc
-at://did:plc:kqfemlwlb2eofb7dzm6t4xug/app.bsky.feed.post/3n25z56w4qy2j,2026-11-13T03:10:47+00:00,2026-11-13T04:11:33+00:00,60.8,2026-11-13 2026-11-14 2026-11-15,init,2026-11-13T04:11:33+00:00
+uri,posted_utc,seen_utc,lag_min,days,dispatched,factbase_listed_utc,kind
+at://did:plc:kqfemlwlb2eofb7dzm6t4xug/app.bsky.feed.post/3n25z56w4qy2j,2026-11-13T03:10:47+00:00,2026-11-13T04:11:33+00:00,60.8,2026-11-13 2026-11-14 2026-11-15,init,2026-11-13T04:11:33+00:00,
